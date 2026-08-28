@@ -1,0 +1,3 @@
+message_center:
+  host: localhost
+  port: 7777
