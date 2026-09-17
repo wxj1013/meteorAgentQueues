@@ -31,5 +31,6 @@ class MessageCenter:
     def report_result(self, task_id: str, result: str):
         self._send("report", (task_id, result))
 
-    def clear_queues(self):
-        self._send("clear")
+    def fetch_result(self, task_id: str):
+        resp = self._send("result", task_id)
+        return resp["data"]

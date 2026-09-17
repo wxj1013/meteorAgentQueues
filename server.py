@@ -13,6 +13,9 @@ QUEUES = {
     "tester": queue.Queue(),
 }
 
+# 任务进展和回报列表
+results = {}
+
 class QueueHandler(socketserver.BaseRequestHandler):
     def handle(self):
         data = self.request.recv(8192)
@@ -24,6 +27,7 @@ class QueueHandler(socketserver.BaseRequestHandler):
             self.request.sendall(pickle.dumps({"error": "bad request"}))
             return
 
+        # 发布一个任务
         if cmd == "publish":
             queue_name, content = args
             if queue_name not in QUEUES:
@@ -39,23 +43,19 @@ class QueueHandler(socketserver.BaseRequestHandler):
             if queue_name not in QUEUES:
                 self.request.sendall(pickle.dumps({"error": "no such queue"}))
                 return
-            data = QUEUES[queue_name].get(5)
-            self.request.sendall(pickle.dumps({"ok": True, "data": data}))
+            task = QUEUES[queue_name].get(5)
+            self.request.sendall(pickle.dumps({"ok": True, "data": task}))
 
         elif cmd == "report":
             task_id, result = args
-            task = Task(task_id=task_id, result=result)
-            QUEUES["planner"].put(pickle.dumps(task))
+            results[task_id] = result
             self.request.sendall(pickle.dumps({"ok": True}))
 
-        elif cmd == "clear":
-            for q in QUEUES.values():
-                while not q.empty():
-                    try:
-                        q.get_nowait()
-                    except:
-                        break
-            self.request.sendall(pickle.dumps({"ok": True}))
+        elif cmd == "result":
+            task_id = args
+            result = results[task_id]
+            self.request.sendall(pickle.dumps({"ok": True, "data": result}))
+
         else:
             self.request.sendall(pickle.dumps({"error": "unknown command"}))
 
