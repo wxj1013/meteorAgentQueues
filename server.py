@@ -3,6 +3,7 @@ import pickle
 import queue
 import uuid
 from task import Task
+import threading
 
 # 五个任务队列
 QUEUES = {
@@ -14,6 +15,7 @@ QUEUES = {
 }
 
 # 任务进展和回报列表
+results_lock = threading.Lock()
 results = {}
 
 class QueueHandler(socketserver.BaseRequestHandler):
@@ -41,20 +43,28 @@ class QueueHandler(socketserver.BaseRequestHandler):
         elif cmd == "fetch":
             queue_name = args
             if queue_name not in QUEUES:
-                self.request.sendall(pickle.dumps({"error": "no such queue"}))
+                self.request.sendall(pickle.dumps({"error": f"queue {queue_name} not exists"}))
                 return
-            task = QUEUES[queue_name].get(5)
-            self.request.sendall(pickle.dumps({"ok": True, "data": task}))
+            try:
+                task = QUEUES[queue_name].get_nowait()
+                self.request.sendall(pickle.dumps({"ok": True, "data": task}))
+            except queue.Empty:
+                self.request.sendall(pickle.dumps({"ok": False, "error": "queue empty"}))
 
         elif cmd == "report":
             task_id, result = args
-            results[task_id] = result
+            with results_lock:
+                results[task_id] = result
             self.request.sendall(pickle.dumps({"ok": True}))
 
         elif cmd == "result":
             task_id = args
-            result = results[task_id]
-            self.request.sendall(pickle.dumps({"ok": True, "data": result}))
+            with results_lock:
+                result = results.get(task_id)
+            if result is None:
+                self.request.sendall(pickle.dumps({"ok": False, "error": "not found"}))
+            else:
+                self.request.sendall(pickle.dumps({"ok": True, "data": result}))
 
         else:
             self.request.sendall(pickle.dumps({"error": "unknown command"}))

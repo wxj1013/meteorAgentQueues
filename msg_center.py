@@ -24,7 +24,7 @@ class MessageCenter:
 
     def fetch_task(self, queue: str) -> Optional[Task]:
         resp = self._send("fetch", queue)
-        if resp.get("ok"):
+        if resp.get("ok") and resp.get("data") is not None:
             return pickle.loads(resp["data"])
         return None
 
@@ -33,4 +33,6 @@ class MessageCenter:
 
     def fetch_result(self, task_id: str):
         resp = self._send("result", task_id)
-        return resp["data"]
+        if resp.get("ok"):
+            return resp["data"]
+        return None
