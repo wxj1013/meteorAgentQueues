@@ -1,3 +1,4 @@
+# server.py
 import socketserver
 import pickle
 import queue
@@ -65,6 +66,40 @@ class QueueHandler(socketserver.BaseRequestHandler):
                 self.request.sendall(pickle.dumps({"ok": False, "error": "not found"}))
             else:
                 self.request.sendall(pickle.dumps({"ok": True, "data": result}))
+
+        elif cmd == "peek":
+            queue_name = args
+            if queue_name not in QUEUES:
+                self.request.sendall(pickle.dumps({"error": f"queue {queue_name} not exists"}))
+                return
+            q = QUEUES[queue_name]
+            # 使用队列内部的 mutex 保证线程安全地读取
+            with q.mutex:
+                all_items = list(q.queue)  # q.queue 是 collections.deque
+                count = len(all_items)
+                peek_items = all_items[:10]  # 取前10个（仍是 bytes）
+            self.request.sendall(pickle.dumps({
+                "ok": True, 
+                "count": count, 
+                "data": peek_items
+            }))
+
+        elif cmd == "clear_queue":
+            queue_name = args
+            if queue_name not in QUEUES:
+                self.request.sendall(pickle.dumps({"error": f"queue {queue_name} not exists"}))
+                return
+            q = QUEUES[queue_name]
+            with q.mutex:
+                q.queue.clear()  # 直接清空底层 deque
+            self.request.sendall(pickle.dumps({"ok": True, "cleared": queue_name}))
+
+        elif cmd == "clear_all":
+            # args 在这里是 None
+            for qname, q in QUEUES.items():
+                with q.mutex:
+                    q.queue.clear()
+            self.request.sendall(pickle.dumps({"ok": True, "cleared": "all"}))
 
         else:
             self.request.sendall(pickle.dumps({"error": "unknown command"}))
